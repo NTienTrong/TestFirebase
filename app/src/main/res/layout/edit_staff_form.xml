@@ -60,13 +60,15 @@
                 android:layout_height="wrap_content"
                 android:hint="Mã nhân viên"
                 android:layout_marginBottom="8dp"
-                android:enabled="true"/> <EditText
-            android:id="@+id/staff_name"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Họ và tên"
-            android:layout_marginBottom="8dp"
-            android:enabled="false"/>
+                android:enabled="true"/>
+
+            <EditText
+                android:id="@+id/staff_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Họ và tên"
+                android:layout_marginBottom="8dp"
+                android:enabled="false"/>
 
             <EditText
                 android:id="@+id/staff_email"
@@ -82,7 +84,17 @@
                 android:layout_height="wrap_content"
                 android:hint="Số điện thoại"
                 android:inputType="phone"
-                android:layout_marginBottom="16dp"/>
+                android:layout_marginBottom="8dp"/>
+
+            <EditText
+                android:id="@+id/staff_unit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Đơn vị"
+                android:layout_marginBottom="16dp"
+                android:focusable="false"
+                android:clickable="true"
+                />
 
             <Button
                 android:id="@+id/save_staff_info"

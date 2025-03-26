@@ -26,6 +26,8 @@
             </intent-filter>
         </activity>
         <activity android:name=".MainActivity" android:exported="false" android:label=""/>
+        <activity android:name=".ui.activities.AdminActivity" android:exported="false" android:label=""/>
+        <activity android:name=".ui.activities.OutlookLoginActivity" android:exported="false" android:label=""/>
         <activity android:name=".ui.activities.RegisterActivity" android:exported="false"/>
         <activity android:name=".ui.activities.ForgotPasswordActivity" android:exported="false"/>
         <activity android:name=".ui.activities.UnitsListActivity" android:exported="false"/>

@@ -19,6 +19,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import java.util.*
 import androidx.appcompat.app.AlertDialog
+import com.edu.tlucontact.data.repositories.StaffRepository
+import com.google.firebase.firestore.DocumentReference
 
 class EditStaffFormActivity : AppCompatActivity() {
 
@@ -29,6 +31,7 @@ class EditStaffFormActivity : AppCompatActivity() {
     private var selectedImageUri: Uri? = null
     private var userId: String? = null
     private var staff: Staff? = null
+    private var unitRef: DocumentReference? = null
 
     companion object {
         private const val PICK_IMAGE_REQUEST = 1
@@ -49,6 +52,7 @@ class EditStaffFormActivity : AppCompatActivity() {
         loadStaffData()
         setupChangeAvatarButton()
         setupSaveButton()
+        setupUnitSelection()
     }
 
     private fun setupToolbar() {
@@ -97,11 +101,23 @@ class EditStaffFormActivity : AppCompatActivity() {
                         staff?.let { staffInfo ->
                             binding.staffId.setText(staffInfo.staffId)
                             binding.staffPhone.setText(staffInfo.phone)
+                            unitRef = staffInfo.unit
+
+                            unitRef?.get()?.addOnSuccessListener { unitDocument ->
+                                if (unitDocument.exists()) {
+                                    val unitName = unitDocument.getString("name")
+                                    binding.staffUnit.setText(unitName)
+                                } else {
+                                    binding.staffUnit.setText("Không tìm thấy đơn vị")
+                                }
+                            }?.addOnFailureListener {
+                                binding.staffUnit.setText("Lỗi tải đơn vị")
+                            }
                         }
                     } else {
                         Log.w("EditStaffFormActivity", "No staff data found for userId: $uid")
                     }
-                    Log.d("EditStaffFormActivity", "querySnapshot size: ${querySnapshot.size()}") // Thêm log
+                    Log.d("EditStaffFormActivity", "querySnapshot size: ${querySnapshot.size()}")
                 }
                 .addOnFailureListener { e ->
                     Log.e("EditStaffFormActivity", "Error loading staff data: ${e.message}")
@@ -135,45 +151,55 @@ class EditStaffFormActivity : AppCompatActivity() {
             val staffId = binding.staffId.text.toString()
             val phone = binding.staffPhone.text.toString()
 
-            val staffData = hashMapOf(
-                "staffId" to staffId,
-                "phone" to phone,
-                "userId" to uid
-            )
+            firestore.collection("users").document(uid).get()
+                .addOnSuccessListener { userDocument ->
+                    if (userDocument.exists()) {
+                        val email = userDocument.getString("email")
+                        val fullName = userDocument.getString("displayName")
 
-            firestore.collection("staff").whereEqualTo("userId", uid).get()
-                .addOnSuccessListener { querySnapshot ->
-                    if (querySnapshot.isEmpty) {
-                        Log.w("EditStaffFormActivity", "No staff document found for update, adding new document.")
-                        firestore.collection("staff").add(staffData)
-                            .addOnSuccessListener {
-                                Log.d("EditStaffFormActivity", "Staff data added successfully.")
-                                updateUserData(uid, phone)
+                        firestore.collection("staff").whereEqualTo("userId", uid).get()
+                            .addOnSuccessListener { querySnapshot ->
+                                val staffData = hashMapOf(
+                                    "staffId" to staffId,
+                                    "phone" to phone,
+                                    "userId" to uid,
+                                    "email" to email,
+                                    "fullName" to fullName,
+                                    "unit" to unitRef
+                                )
+
+                                if (querySnapshot.isEmpty()) {
+                                    firestore.collection("staff").add(staffData)
+                                        .addOnSuccessListener {
+                                            updateUserData(uid, phone)
+                                        }
+                                        .addOnFailureListener { e ->
+                                            Log.e("EditStaffFormActivity", "Error adding staff data: ${e.message}")
+                                        }
+                                } else {
+                                    val staffDocument = querySnapshot.documents[0]
+                                    firestore.collection("staff").document(staffDocument.id).update(staffData as Map<String, Any>)
+                                        .addOnSuccessListener {
+                                            updateUserData(uid, phone)
+                                        }
+                                        .addOnFailureListener { e ->
+                                            Log.e("EditStaffFormActivity", "Error updating staff data: ${e.message}")
+                                        }
+                                }
+
+                                selectedImageUri?.let { uri ->
+                                    uploadImage(uri, uid)
+                                } ?: run {
+                                    updateUserData(uid, phone)
+                                }
                             }
                             .addOnFailureListener { e ->
-                                Log.e("EditStaffFormActivity", "Error adding staff data: ${e.message}")
+                                Log.e("EditStaffFormActivity", "Error getting staff data: ${e.message}")
                             }
-                    } else {
-                        val staffDocument = querySnapshot.documents[0]
-                        Log.d("EditStaffFormActivity", "staffDocument.id: ${staffDocument.id}")
-                        firestore.collection("staff").document(staffDocument.id).update(staffData as Map<String, Any>)
-                            .addOnSuccessListener {
-                                Log.d("EditStaffFormActivity", "Staff data updated successfully.")
-                                updateUserData(uid, phone)
-                            }
-                            .addOnFailureListener { e ->
-                                Log.e("EditStaffFormActivity", "Error updating staff data: ${e.message}")
-                            }
-                    }
-
-                    selectedImageUri?.let { uri ->
-                        uploadImage(uri, uid)
-                    } ?: run {
-                        updateUserData(uid, phone)
                     }
                 }
                 .addOnFailureListener { e ->
-                    Log.e("EditStaffFormActivity", "Error getting staff data: ${e.message}")
+                    Log.e("EditStaffFormActivity", "Error getting user data: ${e.message}")
                 }
         }
     }
@@ -181,12 +207,14 @@ class EditStaffFormActivity : AppCompatActivity() {
     private fun updateUserData(userId: String, phone: String) {
         firestore.collection("users").document(userId).update("phoneNumber", phone)
             .addOnSuccessListener {
-                Log.d("EditStaffFormActivity", "User phone number updated successfully.")
                 showSuccessDialog()
+                setResult(RESULT_OK)
+                StaffRepository().clearCache()
             }
             .addOnFailureListener { e ->
                 Log.e("EditStaffFormActivity", "Error updating user phone number: ${e.message}")
                 showSuccessDialog()
+                setResult(RESULT_OK)
             }
     }
 
@@ -227,5 +255,43 @@ class EditStaffFormActivity : AppCompatActivity() {
                 }
                 .create()
         }
+    }
+
+    private fun setupUnitSelection() {
+        binding.staffUnit.setOnClickListener {
+            fetchUnitsAndShowDialog()
+        }
+    }
+
+    private fun fetchUnitsAndShowDialog() {
+        firestore.collection("units").get()
+            .addOnSuccessListener { querySnapshot ->
+                val unitNames = mutableListOf<String>()
+                val unitRefs = mutableListOf<DocumentReference>()
+
+                for (document in querySnapshot.documents) {
+                    val unitName = document.getString("name")
+                    val unitRef = document.reference
+                    if (unitName != null) {
+                        unitNames.add(unitName)
+                        unitRefs.add(unitRef)
+                    }
+                }
+
+                showUnitSelectionDialog(unitNames, unitRefs)
+            }
+            .addOnFailureListener { e ->
+                Log.e("EditStaffFormActivity", "Error fetching units: ${e.message}")
+            }
+    }
+
+    private fun showUnitSelectionDialog(unitNames: List<String>, unitRefs: List<DocumentReference>) {
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("Chọn đơn vị")
+        builder.setItems(unitNames.toTypedArray()) { _, which ->
+            unitRef = unitRefs[which]
+            binding.staffUnit.setText(unitNames[which])
+        }
+        builder.show()
     }
 }

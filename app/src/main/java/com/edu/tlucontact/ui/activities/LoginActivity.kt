@@ -8,12 +8,14 @@ import com.edu.tlucontact.MainActivity
 import com.edu.tlucontact.R
 import com.edu.tlucontact.databinding.LoginActivityBinding
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import java.util.regex.Pattern
 
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: LoginActivityBinding
     private lateinit var auth: FirebaseAuth
+    private lateinit var firestore: FirebaseFirestore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -21,6 +23,7 @@ class LoginActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         auth = FirebaseAuth.getInstance()
+        firestore = FirebaseFirestore.getInstance()
 
         binding.loginButton.setOnClickListener {
             validateAndLogin()
@@ -33,6 +36,10 @@ class LoginActivity : AppCompatActivity() {
         binding.registerTextView.setOnClickListener {
             startActivity(Intent(this, RegisterActivity::class.java))
         }
+
+        binding.outlookLoginButton.setOnClickListener {
+            startActivity(Intent(this, OutlookLoginActivity::class.java))
+        }
     }
 
     private fun validateAndLogin() {
@@ -41,18 +48,16 @@ class LoginActivity : AppCompatActivity() {
 
         var isValid = true
 
-        // Validate Email
         if (email.isEmpty()) {
             binding.emailTextInputLayout.error = getString(R.string.email_required_login)
             isValid = false
-        } else if (!Pattern.compile("^[a-zA-Z0-9._%+-]+@(tlu\\.edu\\.vn|e\\.tlu\\.edu\\.vn)$").matcher(email).matches()) {
+        } else if (!Pattern.compile("^[a-zA-Z0-9._%+-]+@(tlu\\.edu\\.vn|e\\.tlu.edu\\.vn)$").matcher(email).matches()) {
             binding.emailTextInputLayout.error = getString(R.string.invalid_email_domain_login)
             isValid = false
         } else {
             binding.emailTextInputLayout.error = null
         }
 
-        // Validate Password
         if (password.isEmpty()) {
             binding.passwordTextInputLayout.error = getString(R.string.password_required_login)
             isValid = false
@@ -69,8 +74,29 @@ class LoginActivity : AppCompatActivity() {
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
-                    startActivity(Intent(this, MainActivity::class.java))
-                    finish()
+                    val user = auth.currentUser
+                    user?.let {
+                        firestore.collection("users").document(it.uid).get()
+                            .addOnSuccessListener { document ->
+                                if (document.exists()) {
+                                    val role = document.getString("role")
+                                    if (role == "admin") {
+                                        // Chuyển đến AdminActivity
+                                        startActivity(Intent(this, AdminActivity::class.java))
+                                        finish()
+                                    } else {
+                                        // Chuyển đến MainActivity
+                                        startActivity(Intent(this, MainActivity::class.java))
+                                        finish()
+                                    }
+                                } else {
+                                    Toast.makeText(this, R.string.login_failed, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .addOnFailureListener {
+                                Toast.makeText(this, R.string.login_failed, Toast.LENGTH_SHORT).show()
+                            }
+                    }
                 } else {
                     Toast.makeText(this, R.string.login_failed, Toast.LENGTH_SHORT).show()
                 }
